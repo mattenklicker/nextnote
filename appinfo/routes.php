@@ -46,4 +46,12 @@ $application->registerRoutes($this, array('routes' => array(
 	array('name' => 'nextnote_api#update', 'url' => '/api/v2.0/note/{id}', 'verb' => 'PUT'),
 	array('name' => 'nextnote_api#delete', 'url' => '/api/v2.0/note/{id}', 'verb' => 'DELETE'),
 
+	//Sharing
+	array('name' => 'share_api#getshares', 'url' => '/api/v2.0/sharing/shares', 'verb' => 'GET'),
+	array('name' => 'share_api#share', 'url' => '/api/v2.0/sharing/shares', 'verb' => 'POST'),
+	array('name' => 'share_api#unshare', 'url' => '/api/v2.0/sharing/shares/{itemSource}', 'verb' => 'DELETE', 'requirements' => array('itemSource' => '.+')),
+	array('name' => 'share_api#setpermissions', 'url' => '/api/v2.0/sharing/shares/{itemSource}/permissions', 'verb' => 'PUT', 'requirements' => array('itemSource' => '.+')),
+
+
+
 )));
