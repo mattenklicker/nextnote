@@ -23,14 +23,19 @@
 
 namespace OCA\NextNote\ShareBackend;
 
+use OCA\NextNote\Db\NextNote;
 use \OCP\Share_Backend;
 
 class NextNoteShareBackend implements Share_Backend {
 
 	private $db;
-
+	private static $defaultPermissions = 31;
 	public function __construct() {
 		$this->db = \OC::$server->getDatabaseConnection();
+	}
+
+	public function getSharedNotes(){
+		return \OCP\Share::getItemsSharedWith('nextnote', 'populated_shares');
 	}
 
 	/**
@@ -132,5 +137,24 @@ class NextNoteShareBackend implements Share_Backend {
 	public function isShareTypeAllowed($shareType) {
 		return true;
 	}
-	
+
+	/**
+	 * Check if the current user has the requested permission.
+	 * For permissions
+	 * @see \OCP\Constants
+	 * @param $permission
+	 * @param $note NextNote
+	 * @return bool|int
+	 */
+	public function checkPermissions($permission, $note) {
+		// gather information
+		$uid = \OC::$server->getUserSession()->getUser()->getUID();
+		// owner is allowed to do everything
+		if ($uid === $note->getUid()) {
+			return true;
+		}
+		// check share permissions
+		$shared_note = \OCP\Share::getItemSharedWith('nextnote', $note->getId(), 'populated_shares')[0];
+		return $shared_note['permissions'] & $permission;
+	}
 }
