@@ -94,7 +94,7 @@ class NextNoteApiController extends ApiController {
 	 * @NoAdminRequired
 	 * @NoCSRFRequired
 	 */
-	public function create($title, $grouping, $note) {
+	public function create($title, $grouping, $content) {
 		if($title == "" || !$title){
 			return new JSONResponse(['error' => 'title is missing']);
 		}
@@ -102,7 +102,7 @@ class NextNoteApiController extends ApiController {
 			'title' => $title,
 			'name' => $title,
 			'grouping' => $grouping,
-			'note' => $note
+			'note' => $content
 		];
 		$uid = \OC::$server->getUserSession()->getUser()->getUID();
 		$result = $this->noteService->create($note, $uid)->jsonSerialize();

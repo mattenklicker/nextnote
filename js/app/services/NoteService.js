@@ -20,42 +20,46 @@
  *
  */
 (function() {
-	'use strict';
-	/**
-	 * @ngdoc service
-	 * @name NextNotesApp.NoteService
-	 * @description
-	 * # NoteService
-	 * Service in the NextNotesApp.
-	 */
-	angular.module('NextNotesApp')
-		.service('NoteService', ['$rootScope', 'NoteFactory', '$timeout', '$q', function($rootScope, NoteFactory, $timeout, $q) {
-			var newNoteTemplate = {
-				'title': '',
-				'content': '',
-				'group': ''
-			};
+  'use strict';
+  /**
+   * @ngdoc service
+   * @name NextNotesApp.NoteService
+   * @description
+   * # NoteService
+   * Service in the NextNotesApp.
+   */
+  angular.module('NextNotesApp').service('NoteService', [
+    '$rootScope',
+    'NoteFactory',
+    '$timeout',
+    '$q',
+    function($rootScope, NoteFactory, $timeout, $q) {
+      var newNoteTemplate = {
+        'title': '',
+        'content': '',
+        'group': '',
+        'owner': {
+          'uid': OC.getCurrentUser().uid
+        },
+        'permissions': OC.PERMISSION_ALL
+      };
 
-			return {
-				newNote: function() {
-					return angular.copy(newNoteTemplate);
-				},
-				getNoteById: function(noteId) {
-					noteId = parseInt(noteId);
-					var deferred = $q.defer();
-					if ($rootScope.notes && $rootScope.notes.hasOwnProperty(noteId)) {
-						deferred.resolve(new NoteFactory($rootScope.notes[noteId]));
-					} else {
-						NoteFactory.get({id: noteId}, function(note) {
-							$rootScope.notes[note.id] = note;
-							deferred.resolve(note);
-						});
-					}
-					return deferred.promise;
-				},
-				save: NoteFactory.save,
-				update: NoteFactory.update
+      return {
+        newNote: function() {
+          return angular.copy(newNoteTemplate);
+        },
+        getNoteById: function(noteId) {
+          noteId = parseInt(noteId);
+          var deferred = $q.defer();
+          NoteFactory.get({id: noteId}, function(note) {
+            $rootScope.notes[note.id] = note;
+            deferred.resolve(note);
+          });
+          return deferred.promise;
+        },
+        save: NoteFactory.save,
+        update: NoteFactory.update,
 
-			};
-		}]);
+      };
+    }]);
 }());
