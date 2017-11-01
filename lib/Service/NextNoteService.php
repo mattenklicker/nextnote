@@ -26,6 +26,7 @@ namespace OCA\NextNote\Service;
 use OCA\NextNote\Db\NextNote;
 use OCA\NextNote\Utility\Utils;
 use OCA\NextNote\Db\NextNoteMapper;
+use OCP\ILogger;
 
 
 class NextNoteService {
@@ -46,9 +47,10 @@ class NextNoteService {
 	 * @param string|bool $grouping
 	 * @return NextNote[]
 	 */
-	public function findNotesFromUser($userId, $deleted = false, $grouping = false) {
+	public function findNotesFromUser($userId, $deleted = false, $grouping = false, ILogger $logger) {
+		$logger->error("NextNoteService::findNotesFromUser($userId", array('app' => 'NextNote'));
 		// Get shares
-		return $this->noteMapper->findNotesFromUser($userId, $deleted, $grouping);
+		return $this->noteMapper->findNotesFromUser($userId, $deleted, $grouping, $logger);
 	}
 
     /**
@@ -60,8 +62,9 @@ class NextNoteService {
      * @return NextNote
      * @internal param $vault_id
      */
-	public function find($note_id, $user_id = null, $deleted = false) {
-		$note = $this->noteMapper->find($note_id, $user_id, $deleted);
+	public function find($note_id, $user_id = null, $deleted = false, ILogger $logger) {
+		$logger->error("NextNoteService::find($note_id", array('app' => 'NextNote'));
+		$note = $this->noteMapper->find($note_id, $user_id, $deleted, $logger);
 		return $note;
 	}
 

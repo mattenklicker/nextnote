@@ -27,7 +27,6 @@ use \OCA\NextNote\Utility\Utils;
 use OCP\AppFramework\Db\Entity;
 use OCP\IDBConnection;
 use OCP\AppFramework\Db\Mapper;
-use OCP\ILogger;
 
 class NextNoteMapper extends Mapper {
 	private $utils;
@@ -38,31 +37,6 @@ class NextNoteMapper extends Mapper {
 		$this->utils = $utils;
 	}
 
-	/* TODO: change to config parameter */
-	const FOLDER = 'Notes';
-	
-	private function startsWith($haystack, $needle) {
-		return $needle === "" || strripos($haystack, $needle, -strlen($haystack)) !== FALSE;
-	}
-
-	private function endsWith($string, $test) {
-		$strlen = strlen($string);
-		$testlen = strlen($test);
-		if ($testlen > $strlen) return false;
-		return substr_compare($string, $test, $strlen - $testlen, $testlen, true) === 0;
-	}
-
-	private function getGroupAndNameForFile($filename) {
-		$name = preg_replace('/\\.[^.\\s]{3,4}$/', '', $filename);
-		$group = "";
-		if (substr($name,0,1) == "[") {
-			$end = strpos($name, ']');
-			$group = substr($name, 1, $end-1);	
-			$name = substr($name, $end+1, strlen($name)-$end+1);
-			$name = trim($name);
-		}
-		return array ($group, $name);
-	}
 
     /**
      * @param $note_id
@@ -70,50 +44,38 @@ class NextNoteMapper extends Mapper {
      * @param int|bool $deleted
      * @return NextNote if not found
      */
-	public function find($note_id, $user_id = null, $deleted = false, ILogger $logger) {
-		$logger->error("NextNoteMapper::find($note_id", array('app' => 'NextNote'));
-		/* TODO: better way to find note in file system based on note_id? */
-		$results = [];
-		
-		// build array from file list
-		$count = 0;
-		if ($listing = \OC\Files\Filesystem::opendir(NextNoteMapper::FOLDER)) {
-			if (!$listing) {
-				throw new \Exception( "ERROR: Error listing directory." );
-				exit;
-			}
-			while (($file = readdir($listing)) !== false) {
-				throw new \Exception("checking file " . $file);
-				$tmpfile = $file;
-				if ($tmpfile == "." || $tmpfile == "..") continue;
-				if (!$this->endsWith($tmpfile, ".htm")) continue;
-				if ($info = \OC\Files\Filesystem::getFileInfo(NextNoteMapper::FOLDER."/".$tmpfile)) {
-					// if count is the note_id, we have found it
-					if ($count == $note_id) {
-						// Separate the name and group name
-						list ($fgroup, $fname) = $this->getGroupAndNameForFile($tmpfile);
-
-						// populate result array as for database
-						$item = [];
-						$item['id'] = $count;
-						$item['name'] = $fname;
-						$item['grouping'] = $fgroup;
-						$item['mtime'] = $info['mtime'];
-						$item['deleted'] = 0;
-						$item['uid'] = $userId;
-						$note = $this->makeEntityFromFile($item);
-						$note->setNote(\OC\Files\Filesystem::file_get_contents($tmpfile));
-						
-						$results[] = $note;
-					}
-
-					$count++;
-				}
-			}
+	public function find($note_id, $user_id = null, $deleted = false) {
+		$params = [$note_id];
+		$uidSql = '';
+		if ($user_id) {
+			$params[] = $user_id;
+			$uidSql = 'and n.uid = ?';
 		}
 
+		$deletedSql = '';
+		if ($deleted !== false) {
+			$params[] = $deleted;
+			$deletedSql = 'and n.deleted = ?';
+		}
+		$sql = "SELECT id, uid, name, grouping, shared, mtime, deleted, note FROM *PREFIX*ownnote n WHERE n.id= ? $uidSql $deletedSql";
+		$results = [];
+		foreach ($this->execute($sql, $params)->fetchAll() as $item) {
+			/**
+			 * @var $note NextNote
+			 */
+			$note = $this->makeEntityFromDBResult($item);
+			/* fetch note parts */
+			$noteParts = $this->getNoteParts($note);
+			$partsTxt = implode('', array_map(function ($part) {
+				return $part['note'];
+			}, $noteParts));
+			$note->setNote($item['note'] . $partsTxt);
+
+			$results[] = $note;
+		}
 		return array_shift($results);
 	}
+
 
 	/**
 	 * @param $userId
@@ -121,45 +83,28 @@ class NextNoteMapper extends Mapper {
 	 * @param string|bool $group
 	 * @return NextNote[] if not found
 	 */
-	public function findNotesFromUser($userId, $deleted = 0, $group = false, ILogger $logger) {
-		$logger->error("NextNoteMapper::findNotesFromUser($userId", array('app' => 'NextNote'));
-		/* TODO: what would the params mean for file system?
-			group -> Filter notes by group name
-			deleted -> 1 to get deleted, 0 or omit to show normal notes.
-		*/
-		$results = [];
-		
-		// build array from file list
-		$count = 0;
-		if ($listing = \OC\Files\Filesystem::opendir(NextNoteMapper::FOLDER)) {
-			if (!$listing) {
-				throw new \Exception( "ERROR: Error listing directory." );
-				exit;
-			}
-			while (($file = readdir($listing)) !== false) {
-				$tmpfile = $file;
-				if ($tmpfile == "." || $tmpfile == "..") continue;
-				if (!$this->endsWith($tmpfile, ".htm")) continue;
-				if ($info = \OC\Files\Filesystem::getFileInfo(NextNoteMapper::FOLDER."/".$tmpfile)) {
-					// Separate the name and group name
-					list ($fgroup, $fname) = $this->getGroupAndNameForFile($tmpfile);
-
-					// populate result array as for database
-					$item = [];
-					$item['id'] = $count;
-					$item['name'] = $fname;
-					$item['grouping'] = $fgroup;
-					$item['mtime'] = $info['mtime'];
-					$item['deleted'] = 0;
-					$item['uid'] = $userId;
-					$note = $this->makeEntityFromFile($item);
-					
-					$results[] = $note;
-					$count++;
-				}
-			}
+	public function findNotesFromUser($userId, $deleted = 0, $group = false) {
+		$params = [$userId];
+		$groupSql = '';
+		if ($group) {
+			$groupSql = 'and n.grouping = ?';
+			$params[] = $group;
 		}
-
+		$deletedSql = '';
+		if ($deleted !== false) {
+			$deleted = (int) $deleted;
+			$deletedSql = 'and n.deleted = ?';
+			$params[] = $deleted;
+		}
+		$sql = "SELECT id, uid, name, grouping, shared, mtime, deleted, note FROM *PREFIX*ownnote n WHERE `uid` = ? $groupSql $deletedSql";
+		$results = [];
+		foreach ($this->execute($sql, $params)->fetchAll() as $item) {
+			/**
+			 * @var $note NextNote
+			 */
+			$note = $this->makeEntityFromDBResult($item);
+			$results[] = $note;
+		}
 		return $results;
 	}
 
@@ -269,7 +214,7 @@ class NextNoteMapper extends Mapper {
 	 * @param $arr
 	 * @return NextNote
 	 */
-	public function makeEntityFromFile($arr) {
+	public function makeEntityFromDBResult($arr) {
 		$note = new NextNote();
 		$note->setId($arr['id']);
 		$note->setName($arr['name']);
