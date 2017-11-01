@@ -71,7 +71,7 @@ class NextNoteMapper extends Mapper {
      * @return NextNote if not found
      */
 	public function find($note_id, $user_id = null, $deleted = false, ILogger $logger) {
-		$logger->error("NextNoteMapper::find($note_id", array('app' => 'NextNote'));
+		//$logger->error("NextNoteMapper::find($note_id", array('app' => 'NextNote'));
 		/* TODO: better way to find note in file system based on note_id? */
 		$results = [];
 		
@@ -83,13 +83,15 @@ class NextNoteMapper extends Mapper {
 				exit;
 			}
 			while (($file = readdir($listing)) !== false) {
-				throw new \Exception("checking file " . $file);
+				//$logger->error("checking file " . $file, array('app' => 'NextNote'));
 				$tmpfile = $file;
 				if ($tmpfile == "." || $tmpfile == "..") continue;
 				if (!$this->endsWith($tmpfile, ".htm")) continue;
 				if ($info = \OC\Files\Filesystem::getFileInfo(NextNoteMapper::FOLDER."/".$tmpfile)) {
 					// if count is the note_id, we have found it
+					//$logger->error("checking count " . $count, array('app' => 'NextNote'));
 					if ($count == $note_id) {
+						//$logger->error("found file " . $note_id, array('app' => 'NextNote'));
 						// Separate the name and group name
 						list ($fgroup, $fname) = $this->getGroupAndNameForFile($tmpfile);
 
@@ -100,11 +102,14 @@ class NextNoteMapper extends Mapper {
 						$item['grouping'] = $fgroup;
 						$item['mtime'] = $info['mtime'];
 						$item['deleted'] = 0;
-						$item['uid'] = $userId;
+						$item['uid'] = $user_id;
 						$note = $this->makeEntityFromFile($item);
-						$note->setNote(\OC\Files\Filesystem::file_get_contents($tmpfile));
+						$note->setNote(\OC\Files\Filesystem::file_get_contents(NextNoteMapper::FOLDER."/".$tmpfile));
 						
 						$results[] = $note;
+						
+						// done - lets get out of here
+						break;
 					}
 
 					$count++;
@@ -122,7 +127,7 @@ class NextNoteMapper extends Mapper {
 	 * @return NextNote[] if not found
 	 */
 	public function findNotesFromUser($userId, $deleted = 0, $group = false, ILogger $logger) {
-		$logger->error("NextNoteMapper::findNotesFromUser($userId", array('app' => 'NextNote'));
+		//$logger->error("NextNoteMapper::findNotesFromUser($userId", array('app' => 'NextNote'));
 		/* TODO: what would the params mean for file system?
 			group -> Filter notes by group name
 			deleted -> 1 to get deleted, 0 or omit to show normal notes.
@@ -172,27 +177,25 @@ class NextNoteMapper extends Mapper {
 	 * @return NextNote|Entity
 	 * @internal param $userId
 	 */
-	public function create($note) {
-		$len = mb_strlen($note->getNote());
-		$parts = false;
-		if ($len > $this->maxNoteFieldLength) {
-			$parts = $this->utils->splitContent($note->getNote());
-			$note->setNote('');
+	public function create($note, ILogger $logger) {
+		$name = $note->getName();
+		$group = $note->getGrouping();
+		//$logger->error("NextNoteMapper::create for " . $name . " - " . $group . " - " . $note->getNote(), array('app' => 'NextNote'));
+		
+		$tmpfile = NextNoteMapper::FOLDER."/".$name.".htm";
+		if ($group != '')
+			$tmpfile = NextNoteMapper::FOLDER."/[".$group."] ".$name.".htm";
+		
+		// create file if it doesn't already exist
+		if (!\OC\Files\Filesystem::file_exists($tmpfile)) {
+			\OC\Files\Filesystem::touch($tmpfile);
 		}
 
-		$note->setShared(false);
-		/**
-		 * @var $note NextNote
-		 */
-		$note = parent::insert($note);
-
-		if ($parts) {
-			foreach ($parts as $part) {
-				$this->createNotePart($note, $part);
-			}
-			$note->setNote(implode('', $parts));
+		// save note content to file
+		\OC\Files\Filesystem::file_put_contents($tmpfile, $note->getNote());
+		if ($info = \OC\Files\Filesystem::getFileInfo($tmpfile)) {
+			$note->setMtime($info['mtime']);
 		}
-
 
 		return $note;
 	}
@@ -203,65 +206,40 @@ class NextNoteMapper extends Mapper {
 	 * @param NextNote $note
 	 * @return NextNote|Entity
 	 */
-	public function updateNote($note) {
-		$len = mb_strlen($note->getNote());
-		$parts = false;
-		$this->deleteNoteParts($note);
+	public function updateNote($note, ILogger $logger) {
+		$name = $note->getName();
+		$group = $note->getGrouping();
+		//$logger->error("NextNoteMapper::updateNote for " . $name . " - " . $group . " - " . $note->getNote(), array('app' => 'NextNote'));
 
-		if ($len > $this->maxNoteFieldLength) {
-			$parts = $this->utils->splitContent($note->getNote());
-			$note->setNote('');
+		$tmpfile = NextNoteMapper::FOLDER."/".$name.".htm";
+		if ($group != '')
+			$tmpfile = NextNoteMapper::FOLDER."/[".$group."] ".$name.".htm";
+
+		// save note content to file
+		\OC\Files\Filesystem::file_put_contents($tmpfile, $note->getNote());
+		if ($info = \OC\Files\Filesystem::getFileInfo($tmpfile)) {
+			$note->setMtime($info['mtime']);
 		}
-		/**
-		 * @var $note NextNote
-		 */
-		$note = parent::update($note);
-		if ($parts) {
-			foreach ($parts as $part) {
-				$this->createNotePart($note, $part);
-			}
-			$note->setNote(implode('', $parts));
-		}
+
 		return $note;
-	}
-
-	/**
-	 * @param NextNote $note
-	 * @param $content
-	 */
-	public function createNotePart(NextNote $note, $content) {
-		$sql = "INSERT INTO *PREFIX*ownnote_parts VALUES (NULL, ?, ?);";
-		$this->execute($sql, array($note->getId(), $content));
-	}
-
-	/**
-	 * Delete the note parts
-	 *
-	 * @param NextNote $note
-	 */
-	public function deleteNoteParts(NextNote $note) {
-		$sql = 'DELETE FROM *PREFIX*ownnote_parts where id = ?';
-		$this->execute($sql, array($note->getId()));
-	}
-
-	/**
-	 * Get the note parts
-	 *
-	 * @param NextNote $note
-	 * @return array
-	 */
-	public function getNoteParts(NextNote $note) {
-		$sql = 'SELECT * from *PREFIX*ownnote_parts where id = ?';
-		return $this->execute($sql, array($note->getId()))->fetchAll();
 	}
 
 	/**
 	 * @param NextNote $note
 	 * @return bool
 	 */
-	public function deleteNote(NextNote $note) {
-		$this->deleteNoteParts($note);
-		parent::delete($note);
+	public function deleteNote(NextNote $note, ILogger $logger) {
+		$name = $note->getName();
+		$group = $note->getGrouping();
+		//$logger->error("NextNoteMapper::deleteNote for " . $name . " - " . $group, array('app' => 'NextNote'));
+
+		$tmpfile = NextNoteMapper::FOLDER."/".$name.".htm";
+		if ($group != '')
+			$tmpfile = NextNoteMapper::FOLDER."/[".$group."] ".$name.".htm";
+
+		if (\OC\Files\Filesystem::file_exists($tmpfile))
+			\OC\Files\Filesystem::unlink($tmpfile);
+
 		return true;
 	}
 

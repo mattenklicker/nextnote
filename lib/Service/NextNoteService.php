@@ -48,7 +48,7 @@ class NextNoteService {
 	 * @return NextNote[]
 	 */
 	public function findNotesFromUser($userId, $deleted = false, $grouping = false, ILogger $logger) {
-		$logger->error("NextNoteService::findNotesFromUser($userId", array('app' => 'NextNote'));
+		//$logger->error("NextNoteService::findNotesFromUser($userId", array('app' => 'NextNote'));
 		// Get shares
 		return $this->noteMapper->findNotesFromUser($userId, $deleted, $grouping, $logger);
 	}
@@ -63,7 +63,7 @@ class NextNoteService {
      * @internal param $vault_id
      */
 	public function find($note_id, $user_id = null, $deleted = false, ILogger $logger) {
-		$logger->error("NextNoteService::find($note_id", array('app' => 'NextNote'));
+		//$logger->error("NextNoteService::find($note_id", array('app' => 'NextNote'));
 		$note = $this->noteMapper->find($note_id, $user_id, $deleted, $logger);
 		return $note;
 	}
@@ -76,7 +76,8 @@ class NextNoteService {
 	 * @return NextNote
 	 * @throws \Exception
 	 */
-	public function create($note, $userId) {
+	public function create($note, $userId, ILogger $logger) {
+		//$logger->error("NextNoteService::create($note, $userId", array('app' => 'NextNote'));
 		if (is_array($note)) {
 			$entity = new NextNote();
 			$entity->setName($note['title']);
@@ -89,7 +90,7 @@ class NextNoteService {
 		if (!$note instanceof NextNote) {
 			throw new \Exception("Expected OwnNote object!");
 		}
-		return $this->noteMapper->create($note);
+		return $this->noteMapper->create($note, $logger);
 	}
 
 	/**
@@ -101,10 +102,11 @@ class NextNoteService {
 	 * @internal param $userId
 	 * @internal param $vault
 	 */
-	public function update($note) {
+	public function update($note, ILogger $logger) {
+		//$logger->error("NextNoteService::update($note", array('app' => 'NextNote'));
 
 		if (is_array($note)) {
-			$entity = $this->find($note['id']);
+			$entity = $this->find($note['id'], null, false, $logger);
 			$entity->setName($note['title']);
 			$entity->setGrouping($note['grouping']);
 			$entity->setNote($note['note']);
@@ -121,7 +123,7 @@ class NextNoteService {
 //			return false;
 //		}
 
-		return $this->noteMapper->updateNote($note);
+		return $this->noteMapper->updateNote($note, $logger);
 	}
 
 	public function renameNote($FOLDER, $id, $in_newname, $in_newgroup, $uid = null) {
@@ -131,7 +133,7 @@ class NextNoteService {
 		$note = $this->find($id);
 		$note->setName($newname);
 		$note->setGrouping($newgroup);
-		$this->update($note);
+		$this->update($note, $logger);
 
 		return true;
 	}
@@ -144,14 +146,16 @@ class NextNoteService {
 	 * @return bool
 	 * @internal param string $vault_guid
 	 */
-	public function delete($note_id, $user_id = null) {
-		if (!$this->checkPermissions(\OCP\Constants::PERMISSION_DELETE, $note_id)) {
-			return false;
-		}
+	public function delete($note_id, $user_id = null, ILogger $logger) {
+		//$logger->error("NextNoteService::delete($note_id, $user_id", array('app' => 'NextNote'));
+		// @TODO I get "Undefined offset: 0 for $shared_note = \OCP\Share::getItemSharedWith('nextnote', $nid, 'populated_shares')[0];
+//		if (!$this->checkPermissions(\OCP\Constants::PERMISSION_DELETE, $note_id, $logger)) {
+//			return false;
+//		}
 
-		$note = $this->noteMapper->find($note_id, $user_id);
+		$note = $this->noteMapper->find($note_id, $user_id, null, $logger);
 		if ($note instanceof NextNote) {
-			$this->noteMapper->deleteNote($note);
+			$this->noteMapper->deleteNote($note, $logger);
 			return true;
 		} else {
 			return false;
@@ -169,10 +173,10 @@ class NextNoteService {
 		throw new \Exception('Calling a deprecated method! (Folder'. $FOLDER. '. Showdel: '. $showdel .')');
 	}
 
-	private function checkPermissions($permission, $nid) {
+	private function checkPermissions($permission, $nid, ILogger $logger) {
 		// gather information
 		$uid = \OC::$server->getUserSession()->getUser()->getUID();
-		$note = $this->find($nid);
+		$note = $this->find($nid, null, false, $logger);
 		// owner is allowed to change everything
 		if ($uid === $note->getUid()) {
 			return true;

@@ -56,7 +56,7 @@ class NextNoteApiController extends ApiController {
 	 */
 	public function index($deleted = false, $group = false) {
 		$uid = \OC::$server->getUserSession()->getUser()->getUID();
-		$this->logger->error("NextNoteApiController::index for " . $uid, array('app' => 'NextNote'));
+		//$this->logger->error("NextNoteApiController::index for " . $uid, array('app' => 'NextNote'));
 		
 		$results = $this->noteService->findNotesFromUser($uid, $deleted, $group, $this->logger);
 		return new JSONResponse($results);
@@ -68,9 +68,9 @@ class NextNoteApiController extends ApiController {
 	 * @TODO Add etag / lastmodified
 	 */
 	public function get($id) {
-		$this->logger->error("NextNoteApiController::get($id", array('app' => 'NextNote'));
+		//$this->logger->error("NextNoteApiController::get($id", array('app' => 'NextNote'));
 		
-		$results = $this->noteService->find($id, $this->logger);
+		$results = $this->noteService->find($id, null, false, $this->logger);
 		//@TODO for sharing add access check
 		if (!$results) {
 			return new NotFoundJSONResponse();
@@ -85,7 +85,7 @@ class NextNoteApiController extends ApiController {
 	 */
 	public function create($title, $grouping, $note) {
 		$uid = \OC::$server->getUserSession()->getUser()->getUID();
-		$this->logger->error("NextNoteApiController::create($title, $grouping for " . $uid, array('app' => 'NextNote'));
+		//$this->logger->error("NextNoteApiController::create($title, $grouping for " . $uid, array('app' => 'NextNote'));
 
 		if($title == "" || !$title){
 			return new JSONResponse(['error' => 'title is missing']);
@@ -96,7 +96,7 @@ class NextNoteApiController extends ApiController {
 			'grouping' => $grouping,
 			'note' => $note
 		];
-		$result = $this->noteService->create($note, $uid);
+		$result = $this->noteService->create($note, $uid, $this->logger);
 		return new JSONResponse($result);
 	}
 
@@ -105,7 +105,7 @@ class NextNoteApiController extends ApiController {
 	 * @NoCSRFRequired
 	 */
 	public function update($id, $title, $grouping, $content, $deleted) {
-		$this->logger->error("NextNoteApiController::update($id, $title, $grouping", array('app' => 'NextNote'));
+		//$this->logger->error("NextNoteApiController::update($id, $title, $grouping", array('app' => 'NextNote'));
 
 		if($title == "" || !$title){
 			return new JSONResponse(['error' => 'title is missing']);
@@ -120,12 +120,12 @@ class NextNoteApiController extends ApiController {
             'deleted' => $deleted
 		];
         //@TODO for sharing add access check
-		$entity = $this->noteService->find($id);
+		$entity = $this->noteService->find($id, null, false, $this->logger);
 		if (!$entity) {
 			return new NotFoundJSONResponse();
 		}
 
-		$results = $this->noteService->update($note);
+		$results = $this->noteService->update($note, $this->logger);
 		return new JSONResponse($results);
 	}
 
@@ -134,14 +134,14 @@ class NextNoteApiController extends ApiController {
 	 * @NoCSRFRequired
 	 */
 	public function delete($id) {
-		$this->logger->error("NextNoteApiController::delete($id", array('app' => 'NextNote'));
+		//$this->logger->error("NextNoteApiController::delete($id", array('app' => 'NextNote'));
 
-		$entity = $this->noteService->find($id);
+		$entity = $this->noteService->find($id, null, false, $this->logger);
 		if (!$entity) {
 			return new NotFoundJSONResponse();
 		}
         //@TODO for sharing add access check
-		$this->noteService->delete($id);
+		$this->noteService->delete($id, null, $this->logger);
 		$result = (object) ['success' => true];
 		return new JSONResponse($result);
 	}
